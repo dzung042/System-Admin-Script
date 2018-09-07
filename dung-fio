@@ -1,0 +1,30 @@
+Kiểm tra đồng thời random read & random write
+Nếu đơn giản bạn chỉ muốn so sánh hiệu suất đĩa giữa các nhà cung cấp thì nên sử dụng case test sau:
+Tạo 1 file 4GB, thực hiện việc đọc/ghi đồng thời với blocksize 4KB theo tỉ lệ 75% – 25% (tức 3 đọc/1 ghi) và thực hiện đồng thời 64 tác vụ một lúc. Tỉ lệ 3:1 rất phổ biến và xấp xỉ với các dạng database hiện nay.
+fio --randrepeat=1 --ioengine=libaio --direct=1 --gtod_reduce=1 --name=hocvps --filename=hocvps --bs=4k --iodepth=64 --size=4G --readwrite=randrw --rwmixread=75
+
+Đây là kết quả sau khi hệ thống chạy hoàn tất:
+
+hocvps: (g=0): rw=randrw, bs=4K-4K/4K-4K/4K-4K, ioengine=libaio, iodepth=64
+fio-2.0.13
+Starting 1 process
+Jobs: 1 (f=1): [m] [100.0% done] [126.3M/42981K/0K /s] [32.4K/10.8K/0  iops] [eta 00m:00s]
+hocvps: (groupid=0, jobs=1): err= 0: pid=1372: Mon May 29 04:00:15 2017
+  read : io=3072.9MB, bw=124228KB/s, iops=31057 , runt= 25329msec
+  write: io=1023.2MB, bw=41365KB/s, iops=10341 , runt= 25329msec
+  cpu          : usr=10.10%, sys=39.53%, ctx=32710, majf=0, minf=20
+  IO depths    : 1=0.1%, 2=0.1%, 4=0.1%, 8=0.1%, 16=0.1%, 32=0.1%, >=64=100.0%
+     submit    : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     complete  : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.1%, >=64=0.0%
+     issued    : total=r=786643/w=261933/d=0, short=r=0/w=0/d=0
+
+Run status group 0 (all jobs):
+   READ: io=3072.9MB, aggrb=124228KB/s, minb=124228KB/s, maxb=124228KB/s, mint=25329msec, maxt=25329msec
+  WRITE: io=1023.2MB, aggrb=41364KB/s, minb=41364KB/s, maxb=41364KB/s, mint=25329msec, maxt=25329msec
+
+Disk stats (read/write):
+  vda: ios=780554/260043, merge=0/3, ticks=1065572/252824, in_queue=1317905, util=99.50%
+
+Có thể thấy, VPS test có thể thực hiện đồng thời 31,057 tác vụ đọc và 10,341 tác vụ ghi mỗi giây.
+
+Thông thường, trong tình trạng tải nhẹ, VPS sử dụng ổ cứng SSD có thể đạt 40,000 đọc và 10,000 ghi còn sử dụng non-SSD đạt 500 đọc và 200 ghi.
