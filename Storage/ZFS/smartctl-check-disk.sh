@@ -174,3 +174,4 @@ for i in "${!BAD_LIST[@]}"; do
 done
 
 exit 1
+# smartctl -a /dev/sdx | egrep -i "grown defect|read|write|uncorrect|error"
