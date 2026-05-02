@@ -1,5 +1,6 @@
 #!/bin/bash
 # curl -O url /etc/cron.weekly/zfs-weekly-snapshot
+# zfs list -t snapshot
 # ===== CONFIG =====
 DATASETS=(
   "Backup/1"
