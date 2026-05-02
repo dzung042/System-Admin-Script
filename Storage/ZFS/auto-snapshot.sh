@@ -1,5 +1,5 @@
 #!/bin/bash
-# curl -O url /etc/cron.weekly/zfs-weekly-snapshot
+# wget https://raw.githubusercontent.com/dzung042/System-Admin-Script/refs/heads/master/Storage/ZFS/auto-snapshot.sh -O /etc/cron.weekly/zfs-weekly-snapshot
 # zfs list -t snapshot
 # ===== CONFIG =====
 DATASETS=(
