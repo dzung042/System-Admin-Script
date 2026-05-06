@@ -1,7 +1,7 @@
 #!/bin/bash
 
 echo "========================================"
-echo " CVE-2026 Scanner (Apache + Exim)"
+echo "   CVE-2026 Interactive Security Tool"
 echo "========================================"
 echo ""
 
@@ -10,91 +10,129 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-ok()    { echo -e "${GREEN}[SAFE] $1${NC}"; }
-warn()  { echo -e "${YELLOW}[CHECK] $1${NC}"; }
-vuln()  { echo -e "${RED}[VULNERABLE] $1${NC}"; }
+issues=0
+
+log_safe()  { echo -e "${GREEN}[SAFE] $1${NC}"; }
+log_warn()  { echo -e "${YELLOW}[CHECK] $1${NC}"; issues=$((issues+1)); }
+log_vuln()  { echo -e "${RED}[VULNERABLE] $1${NC}"; issues=$((issues+1)); }
 
 # =========================
-# APACHE CHECK
+# Apache check
 # =========================
 
-echo "---- Apache Check ----"
+echo "---- Apache ----"
+
+APACHE_FOUND=0
 
 if command -v apache2 >/dev/null 2>&1; then
     VERSION=$(apache2 -v | grep -oP '[0-9]+\.[0-9]+\.[0-9]+')
     CONF_PATH="/etc/apache2"
+    APACHE_FOUND=1
 elif command -v httpd >/dev/null 2>&1; then
     VERSION=$(httpd -v | grep -oP '[0-9]+\.[0-9]+\.[0-9]+')
     CONF_PATH="/etc/httpd"
-else
-    echo "Apache not installed"
-    APACHE=0
+    APACHE_FOUND=1
 fi
 
-if [ ! -z "$VERSION" ]; then
-    echo "Apache version: $VERSION"
+if [ $APACHE_FOUND -eq 1 ]; then
+    echo "Version: $VERSION"
 
     if [[ "$VERSION" < "2.4.64" ]]; then
-        warn "Apache có thể bị ảnh hưởng CVE-2026"
+        log_vuln "Apache version outdated (CVE risk)"
     else
-        ok "Apache version mới"
+        log_safe "Apache version OK"
     fi
 
     MODULES=$(apachectl -M 2>/dev/null)
 
-    # CVE-2026-24072
-    echo "Checking CVE-2026-24072 (HTTP2)..."
-    echo "$MODULES" | grep -q http2 && warn "mod_http2 enabled" || ok "mod_http2 disabled"
+    echo "$MODULES" | grep -q http2 && log_warn "mod_http2 enabled (CVE-2026-24072)"
+    echo "$MODULES" | grep -q lua   && log_warn "mod_lua enabled (CVE-2026-33006)"
 
-    # CVE-2026-33006
-    echo "Checking CVE-2026-33006 (mod_lua)..."
-    echo "$MODULES" | grep -q lua && vuln "mod_lua enabled" || ok "mod_lua disabled"
-
-    # CVE-2026-23918
-    echo "Checking CVE-2026-23918 (handler/config)..."
-    grep -Ri "SetHandler" $CONF_PATH 2>/dev/null && warn "SetHandler detected"
-    grep -Ri "AddHandler" $CONF_PATH 2>/dev/null && warn "AddHandler detected"
-
+    grep -Ri "SetHandler" $CONF_PATH >/dev/null 2>&1 && log_warn "SetHandler detected (CVE-2026-23918)"
+else
+    echo "Apache not found"
 fi
 
 # =========================
-# EXIM CHECK
+# Exim check
 # =========================
 
 echo ""
-echo "---- Exim Check ----"
+echo "---- Exim ----"
+
+EXIM_FOUND=0
 
 if command -v exim >/dev/null 2>&1; then
+    EXIM_VERSION_FULL=$(exim -bV | head -n 1)
+    EXIM_VERSION=$(echo "$EXIM_VERSION_FULL" | grep -oP '[0-9]+\.[0-9]+')
+    EXIM_FOUND=1
 
-    EXIM_VERSION=$(exim -bV | head -n 1)
-    echo "Exim detected: $EXIM_VERSION"
+    echo "Version: $EXIM_VERSION_FULL"
 
-    VERSION=$(echo "$EXIM_VERSION" | grep -oP '[0-9]+\.[0-9]+')
-
-    # 👉 bạn cần update theo advisory chính thức
-    if [[ "$VERSION" < "4.97" ]]; then
-        vuln "Exim version cũ → có thể dính CVE-2026-40685"
+    if [[ "$EXIM_VERSION" < "4.97" ]]; then
+        log_vuln "Exim outdated (CVE-2026-40685 risk)"
     else
-        ok "Exim version mới"
+        log_safe "Exim version OK"
     fi
-
-    echo "Checking config risk..."
-
-    CONF_FILE="/etc/exim/exim.conf"
-    [ -f "/etc/exim4/exim4.conf.template" ] && CONF_FILE="/etc/exim4/exim4.conf.template"
-
-    # open relay check
-    if grep -Ri "accept" $CONF_FILE 2>/dev/null | grep -q "0.0.0.0/0"; then
-        vuln "Possible open relay detected"
-    else
-        ok "No open relay pattern"
-    fi
-
 else
     echo "Exim not installed"
 fi
 
+# =========================
+# Summary
+# =========================
+
 echo ""
 echo "========================================"
-echo " DONE"
+echo " SUMMARY"
+echo "========================================"
+
+if [ $issues -eq 0 ]; then
+    log_safe "No issues detected"
+    exit 0
+else
+    echo -e "${RED}Total issues: $issues${NC}"
+fi
+
+# =========================
+# Ask for update
+# =========================
+
+echo ""
+read -p "Do you want to auto-update vulnerable services? (y/n): " choice
+
+if [[ "$choice" != "y" ]]; then
+    echo "Skip update."
+    exit 0
+fi
+
+# =========================
+# Perform update
+# =========================
+
+echo ""
+echo "Running update..."
+
+if command -v apt >/dev/null 2>&1; then
+    apt update
+
+    [ $APACHE_FOUND -eq 1 ] && apt install apache2 -y
+    [ $EXIM_FOUND -eq 1 ] && apt install exim4 -y
+
+elif command -v yum >/dev/null 2>&1; then
+    yum makecache
+
+    [ $APACHE_FOUND -eq 1 ] && yum update httpd -y
+    [ $EXIM_FOUND -eq 1 ] && yum update exim -y
+fi
+
+echo ""
+echo "Restarting services..."
+
+[ $APACHE_FOUND -eq 1 ] && systemctl restart apache2 2>/dev/null || systemctl restart httpd 2>/dev/null
+[ $EXIM_FOUND -eq 1 ] && systemctl restart exim 2>/dev/null
+
+echo ""
+echo "========================================"
+echo " UPDATE COMPLETED"
 echo "========================================"
