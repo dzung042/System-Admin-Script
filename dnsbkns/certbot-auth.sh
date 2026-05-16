@@ -2,7 +2,7 @@
 set -euo pipefail
 BKNS_API="https://my.bkns.net/api"
 
-source /root/.secrets/bkns-dns.env
+source /root/.secrets/dns.env
 
 BASIC_TOKEN=$(printf "%s:%s" "$USERNAME" "$PASSWORD" | base64 -w0)
 
